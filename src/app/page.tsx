@@ -8,7 +8,7 @@ export default function Home() {
       <div className="max-w-6xl mx-auto">
         <header className="mb-8">
           <h1 className="text-2xl font-bold text-white tracking-tight">Copybet Monitor</h1>
-          <p className="text-sm text-gray-500 mt-1">Live wallet tracking · auto-refreshes every 30s</p>
+          <p className="text-sm text-gray-500 mt-1">Live wallet tracking · auto-refreshes every 5 min</p>
         </header>
         <WalletGrid />
       </div>
