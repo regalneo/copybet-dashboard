@@ -53,12 +53,12 @@ export const WALLETS = [
     id: 'burner-7',
     label: 'Target 5',
     address: '0x6092F1BC5990159F69A70F21D08163B76e27F432',
-    target: '0x56786f28b1aaa0463db46d0fedb0c1c52e0bbb66',
+    target: '0x96add27f841ae8d5ce2cef8e11f82bd4cda1342f',
   },
   {
     id: 'burner-10',
     label: 'Target 5',
     address: '0x336f83668Da33F4E760a466874C60F40Eb3741FD',
-    target: '0x56786f28b1aaa0463db46d0fedb0c1c52e0bbb66',
+    target: '0x96add27f841ae8d5ce2cef8e11f82bd4cda1342f',
   },
 ];
