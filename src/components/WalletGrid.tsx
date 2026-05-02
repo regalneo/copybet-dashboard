@@ -159,7 +159,7 @@ export default function WalletGrid() {
 
   useEffect(() => { fetch_(); }, [fetch_]);
   useEffect(() => {
-    const id = setInterval(fetch_, 30_000);
+    const id = setInterval(fetch_, 300_000); // 5 min — prediction window is 15m
     return () => clearInterval(id);
   }, [fetch_]);
 
