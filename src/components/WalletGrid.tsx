@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
-interface WalletData {
+interface Wallet {
   id: string;
   label: string;
   target: string;
@@ -27,149 +27,158 @@ interface WalletData {
   error?: string | number;
 }
 
-interface ApiResponse {
-  wallets: WalletData[];
-  updated: string;
+function fmtChips(v: string): string {
+  const n = parseFloat(v);
+  if (isNaN(n)) return '—';
+  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-function formatChips(value: string): string {
-  const num = parseFloat(value);
-  if (isNaN(num)) return '—';
-  return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+function fmtAddr(addr: string): string {
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-function AccuracyBadge({ value }: { value: number }) {
-  const pct = (value * 100).toFixed(1);
-  const color = value >= 0.52 ? 'text-green-400' : value >= 0.48 ? 'text-yellow-400' : 'text-red-400';
-  return <span className={`font-mono text-sm ${color}`}>{pct}%</span>;
+function pct(n: number): string {
+  return `${(n * 100).toFixed(1)}%`;
 }
 
-function ResultRow({ result }: { result: WalletData['recentResults'][0] }) {
-  const won = result.outcome === result.direction;
+function AccColor({ v }: { v: number }) {
+  if (v >= 0.52) return 'text-emerald-400';
+  if (v >= 0.48) return 'text-yellow-400';
+  return 'text-red-400';
+}
+
+// ── Single wallet card ──────────────────────────────────────────────────────────
+function WalletCard({ w }: { w: Wallet }) {
   return (
-    <div className={`flex items-center gap-3 py-1.5 px-3 rounded ${result.won ? 'bg-green-900/30' : 'bg-red-900/30'}`}>
-      <span className={`text-xs font-bold w-8 ${result.won ? 'text-green-400' : 'text-red-400'}`}>
-        {result.won ? '✅' : '❌'}
-      </span>
-      <span className="text-gray-300 text-xs w-20">{result.asset}</span>
-      <span className={`text-xs font-mono w-8 ${result.direction === 'up' ? 'text-green-400' : 'text-red-400'}`}>
-        {result.direction?.toUpperCase()}
-      </span>
-      <span className="text-xs text-gray-500 w-12">{result.tickets?.toLocaleString()}t</span>
-    </div>
-  );
-}
-
-function WalletCard({ wallet }: { wallet: WalletData }) {
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex flex-col gap-4 hover:border-gray-700 transition-colors">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-white">{wallet.id}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{wallet.label}</p>
+          <h3 className="text-base font-semibold text-white">{w.id}</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{w.label}</p>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold text-white font-mono">
-            {formatChips(wallet.balance)}
+          <div className="text-2xl font-bold text-white tabular-nums">{fmtChips(w.balance)}</div>
+          <div className="text-xs text-gray-500">chips</div>
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: 'Accuracy', value: pct(w.accuracy), color: <AccColor v={w.accuracy} /> },
+          { label: 'W:L', value: `${w.correct}：${w.incorrect}`, color: 'text-gray-200' },
+          { label: 'Excess', value: fmtChips(w.excess || '0'), color: parseFloat(w.excess || '0') >= 0 ? 'text-emerald-400' : 'text-red-400' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-gray-800 rounded-xl px-3 py-2.5 text-center">
+            <div className={`text-sm font-bold tabular-nums ${color}`}>{value}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{label}</div>
           </div>
-          <div className="text-xs text-gray-400">chips</div>
-        </div>
+        ))}
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gray-800 rounded-lg p-3 text-center">
-          <div className="text-sm font-bold text-white">{wallet.correct + wallet.incorrect}</div>
-          <div className="text-xs text-gray-400">total</div>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-3 text-center">
-          <AccuracyBadge value={wallet.accuracy} />
-          <div className="text-xs text-gray-400">accuracy</div>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-3 text-center">
-          <div className={`text-sm font-bold ${parseFloat(wallet.excess || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {wallet.excess || '0'}
-          </div>
-          <div className="text-xs text-gray-400">excess</div>
-        </div>
-      </div>
-
-      {/* Address */}
-      <div className="text-xs text-gray-600 font-mono break-all">
-        {wallet.address}
-      </div>
-
-      {/* Recent results */}
+      {/* Recent predictions */}
       <div>
-        <div className="text-xs text-gray-500 mb-2 uppercase tracking-wider">Recent (last 5)</div>
+        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Recent</div>
         <div className="flex flex-col gap-1">
-          {wallet.recentResults.length > 0 ? (
-            wallet.recentResults.map((r, i) => <ResultRow key={i} result={r} />)
-          ) : (
+          {w.recentResults.length > 0 ? w.recentResults.slice(0, 4).map((r, i) => (
+            <div key={i} className={`flex items-center gap-2.5 py-1.5 px-3 rounded-lg ${r.won ? 'bg-emerald-900/20' : 'bg-red-900/20'}`}>
+              <span className="text-xs font-bold w-6">{r.won ? '✅' : '❌'}</span>
+              <span className="text-xs text-gray-300 w-20">{r.asset}</span>
+              <span className={`text-xs font-mono font-bold w-7 ${r.direction === 'up' ? 'text-emerald-400' : 'text-red-400'}`}>
+                {r.direction?.toUpperCase()}
+              </span>
+              <span className="text-xs text-gray-500 ml-auto">{r.tickets?.toLocaleString()}t</span>
+            </div>
+          )) : (
             <div className="text-xs text-gray-600 text-center py-2">No recent results</div>
           )}
         </div>
       </div>
 
-      {/* Target */}
-      <div className="text-xs text-gray-600">
-        <span className="text-gray-500">target: </span>
-        <span className="font-mono">{wallet.target}</span>
+      {/* Footer */}
+      <div className="flex items-center justify-between text-xs text-gray-600 pt-1 border-t border-gray-800">
+        <span className="font-mono">{fmtAddr(w.address)}</span>
+        <span className="text-gray-600">→ {fmtAddr(w.target)}</span>
       </div>
     </div>
   );
 }
 
-export default function WalletGrid() {
-  const [data, setData] = useState<ApiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<string>('');
+// ── Summary bar ─────────────────────────────────────────────────────────────────
+function SummaryBar({ wallets }: { wallets: Wallet[] }) {
+  const totalBal = wallets.reduce((s, w) => s + parseFloat(w.balance || '0'), 0);
+  const totalCorrect = wallets.reduce((s, w) => s + (w.correct || 0), 0);
+  const totalIncorrect = wallets.reduce((s, w) => s + (w.incorrect || 0), 0);
+  const totalExcess = wallets.reduce((s, w) => s + parseFloat(w.excess || '0'), 0);
+  const avgAcc = wallets.length > 0 ? wallets.reduce((s, w) => s + (w.accuracy || 0), 0) / wallets.length : 0;
 
-  const fetchData = async () => {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      {[
+        { label: 'Total Chips', value: fmtChips(String(totalBal)), accent: 'text-white' },
+        { label: 'Win Rate', value: totalCorrect + totalIncorrect > 0 ? pct(totalCorrect / (totalCorrect + totalIncorrect)) : '—', accent: totalCorrect / (totalCorrect + totalIncorrect) >= 0.5 ? 'text-emerald-400' : 'text-red-400' },
+        { label: 'Avg Accuracy', value: pct(avgAcc), accent: 'text-white' },
+        { label: 'Total Excess', value: fmtChips(String(totalExcess)), accent: totalExcess >= 0 ? 'text-emerald-400' : 'text-red-400' },
+      ].map(({ label, value, accent }) => (
+        <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex flex-col gap-1">
+          <div className="text-xs text-gray-500">{label}</div>
+          <div className={`text-xl font-bold tabular-nums ${accent}`}>{value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main grid ──────────────────────────────────────────────────────────────────
+export default function WalletGrid() {
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [updated, setUpdated] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  const fetch_ = useCallback(async () => {
     try {
-      const res = await fetch('/api/wallets');
-      const json: ApiResponse = await res.json();
-      setData(json);
-      setLastUpdate(json.updated);
+      const r = await fetch('/api/wallets');
+      const json = await r.json();
+      setWallets(json.wallets || []);
+      setUpdated(json.updated || '');
       setLoading(false);
-    } catch (e) {
-      console.error('Failed to fetch', e);
+    } catch {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30_000);
-    return () => clearInterval(interval);
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading wallets...</div>
+  useEffect(() => { fetch_(); }, [fetch_]);
+  useEffect(() => {
+    const id = setInterval(fetch_, 30_000);
+    return () => clearInterval(id);
+  }, [fetch_]);
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64 text-gray-500">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
+        <span className="text-sm">Loading wallets...</span>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-xs text-gray-500">
-          {data?.wallets.length || 0} wallets · last update: {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : '—'}
+      <div className="flex items-center justify-between mb-5">
+        <div className="text-sm text-gray-500">
+          {wallets.length} wallets · updated {updated ? new Date(updated).toLocaleTimeString() : '—'}
         </div>
         <button
-          onClick={fetchData}
-          className="text-xs text-gray-400 hover:text-white border border-gray-700 rounded px-3 py-1 transition-colors"
+          onClick={fetch_}
+          className="text-xs text-gray-400 hover:text-white border border-gray-700 rounded-lg px-3 py-1.5 hover:bg-gray-800 transition-colors"
         >
-          Refresh
+          ↻ Refresh
         </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {data?.wallets.map((w) => (
-          <WalletCard key={w.id} wallet={w} />
-        ))}
+      <SummaryBar wallets={wallets} />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {wallets.map((w) => <WalletCard key={w.id} w={w} />)}
       </div>
     </div>
   );
